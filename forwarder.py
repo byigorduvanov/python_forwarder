@@ -230,6 +230,31 @@ async def handler(event):
 
 async def main():
     print("🚀 Forwarder запущен для всех процессов")
+
+    # 1. Витягаємо source/dest для арбітражного каналу з config.MAPPINGS
+    #    (тут 6620270004 — це той самий source, що використовують у process_6620270004)
+    arb_map = next(m for m in config.MAPPINGS if m["source"] == 6620270004)
+    arb_src = arb_map["source"]
+    arb_dst = arb_map["dest"]
+
+    # 2. Забираємо останнє повідомлення
+    last = await client.get_messages(arb_src, limit=1)
+    if last:
+        msg = last[0]
+        text = msg.message or ""
+        urls = extract_all_links(msg)
+        # 3. Прокидаємо через ваш процесор арбітражу
+        test = process_6620270004(text, urls)
+        # 4. Відсилаємо “тестове” повідомлення у dest
+        await client.send_message(
+            arb_dst,
+            test,
+            parse_mode='md',
+            link_preview=False
+        )
+        print("✅ Тестовое сообщение арбитража переслано.")
+
+    # 5. Далі в звичайному режимі чекаємо нових
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
