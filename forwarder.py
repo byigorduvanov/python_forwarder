@@ -182,6 +182,7 @@ def process_general(text):
 # Главный хендлер
 
 # ID каналів
+ARB_SRC                = 6620270004
 MEXC_SRC               = -1002407118810
 BYBIT_DUMP_SRC         = -1002354753954
 BYBIT_LIQUIDATION_SRC  = -1002579369940
@@ -212,7 +213,7 @@ async def handler(event):
         final = process_bybit_liquidations(text, urls)
 
     # Арбітраж
-    elif src == -1006620270004:
+    elif src == ARB_SRC:
         final = process_6620270004(text, urls)
 
     # Інші (general)
@@ -225,7 +226,6 @@ async def handler(event):
     await client.send_message(dst, final, parse_mode='md', link_preview=False)
 
 
-
 # Запуск клиента
 
 async def main():
@@ -235,4 +235,5 @@ async def main():
 if __name__ == '__main__':
     with client:
         client.loop.run_until_complete(main())
+
 
