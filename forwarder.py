@@ -114,7 +114,7 @@ async def handler(event):
     else:
         final = text
 
-    await client.send_message(dst, final, parse_mode='html')
+    await client.send_message(dst, final, parse_mode='html', link_preview=False)
 
 # Запуск клиента
 
