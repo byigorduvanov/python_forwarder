@@ -63,31 +63,53 @@ def process_2407118810(text, urls):
         if should_block_line(line):
             continue
 
+        # видаляємо Weex і зайві вертикальні риски
+        line = line.replace("Weex", "").replace("|", "").strip()
+
+        # обгортаємо ticker у backticks
+        m = re.match(r'(#mexc_[^:]+:\s*)(\S+)', line, flags=re.IGNORECASE)
+        if m:
+            prefix, ticker = m.groups()
+            line = f"{prefix}`{ticker}`"
+
+        # заміна Trade: Mexc → Markdown-лінк
         if 'Trade: Mexc' in line:
             url = next((u for u in urls if 'mexc.com' in u), None)
             if url:
                 clean_url = url.split('?')[0]
-                line = line.replace('Trade: Mexc', f'Trade: <a href="{clean_url}">Mexc</a>')
+                # ЗАМІНА тут — пишемо Markdown-лінк, а не HTML
+                line = line.replace(
+                    'Trade: Mexc',
+                    f'Trade: [Mexc]({clean_url})'
+                )
 
         lines.append(line)
     return "\n".join(lines)
+
 
 # Обработка Bybit
 
 def process_2354753954(text, urls):
     lines = []
     for line in text.splitlines():
-        if should_block_line(line):
+        # відсікаємо бонусні лінки й підтримку
+        low = line.lower()
+        if 'бонус' in low or 'силка' in low or 'поддерж' in low:
             continue
 
+        # заміна Trade: Bybit → HTML-лінк
         if 'Trade: Bybit' in line:
             url = next((u for u in urls if 'bybit.com' in u), None)
             if url:
                 clean_url = url.split('?')[0]
-                line = line.replace('Trade: Bybit', f'Trade: <a href="{clean_url}">Bybit</a>')
+                line = line.replace(
+                    'Trade: Bybit',
+                    f'Trade: <a href="{clean_url}">Bybit</a>'
+                )
 
         lines.append(line)
     return "\n".join(lines)
+
 
 # Универсальная обработка
 
@@ -114,7 +136,7 @@ async def handler(event):
     else:
         final = text
 
-    await client.send_message(dst, final, parse_mode='html', link_preview=False)
+    await client.send_message(dst, final, parse_mode='md', link_preview=False)
 
 # Запуск клиента
 
