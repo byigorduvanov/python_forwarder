@@ -15,17 +15,26 @@ mapping = {m["source"]: m["dest"] for m in config.MAPPINGS}
 # Извлечение всех ссылок из текста и entities
 
 def extract_all_links(message):
-    urls = set()
-    if message.message:
-        urls.update(re.findall(r'https?://[^\s<>"\]]+|www\.[^\s<>"\]]+', message.message))
+    text = message.message or ""
+    urls = []
+    # 1) Спершу всі чисті URL за допомогою regex (у порядку появи)
+    for m in re.finditer(r'https?://[^\s<>"\]]+|www\.[^\s<>"\]]+', text):
+        url = m.group(0)
+        if url not in urls:
+            urls.append(url)
+    # 2) Додаємо ті, що ховаються під MessageEntityTextUrl (якщо їх ще нема)
     if message.entities:
-        for entity in message.entities:
+        for entity in sorted(message.entities, key=lambda e: e.offset):
             if isinstance(entity, MessageEntityTextUrl):
-                urls.add(entity.url)
+                u = entity.url
             elif isinstance(entity, MessageEntityUrl):
-                url = message.message[entity.offset:entity.offset+entity.length]
-                urls.add(url)
-    return list(urls)
+                u = text[entity.offset:entity.offset+entity.length]
+            else:
+                continue
+            if u not in urls:
+                urls.append(u)
+    return urls
+
 
 # Фильтр по стоп-словам
 
@@ -40,20 +49,48 @@ def should_block_line(line: str) -> bool:
 # Обработка арбитражного канала
 
 def process_6620270004(text, urls):
-    lines = []
-    for line in text.splitlines():
-        if should_block_line(line):
+    lines_out = []
+    all_lines = text.splitlines()
+    if not all_lines:
+        return ""
+
+    # 1) Перший рядок — wrap ticker, не змінюємо
+    first = all_lines[0].strip()
+    m = re.match(r'^([^:\s]+):\s*(.*)', first)
+    if m:
+        ticker, rest = m.groups()
+        lines_out.append(f'`{ticker}`: {rest}')
+    else:
+        lines_out.append(first)
+
+    # 2) Дістаємо в порядку появи біржі з |exchange|
+    exchange_tokens = re.findall(r'\|([^|]+)\|', text)
+
+    # 3) Просто зшиваємо exchange_tokens та urls по відповідних індексах
+    exchange_urls = dict(zip(exchange_tokens, urls))
+
+    # 4) Обробляємо рядки-стікери і всі інші
+    for line in all_lines[1:]:
+        low = line.lower().strip()
+
+        # стоп-слова і "графік"/📈
+        if should_block_line(line) or "графік" in low or line.startswith("📈"):
             continue
 
-        for exchange in ['binance', 'huobi', 'mexc', 'bybit', 'okx', 'gateio', 'kucoin']:
-            if f'[{exchange}]' in line.lower():
-                url = next((u for u in urls if exchange in u), None)
-                if url:
-                    clean_url = url.split('?')[0]
-                    line = line.replace(f'[{exchange}]', f'[<a href="{clean_url}">{exchange}</a>]')
+        # рядок-стікер?
+        m2 = re.match(r'^(\S+)\s*\|([^|]+)\|\s*-\s*(.+)', line)
+        if m2:
+            emoji, exch, action = m2.groups()
+            url = exchange_urls.get(exch, "")
+            clean = url.split('?')[0] if url else ""
+            md_link = f"[{exch}]({clean})" if clean else exch
+            line = f"{emoji} |{md_link}| - {action}"
 
-        lines.append(line)
-    return "\n".join(lines)
+        lines_out.append(line)
+
+    return "\n".join(lines_out)
+
+
 
 # Обработка MEXC
 
