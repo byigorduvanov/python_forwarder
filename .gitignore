@@ -1,2 +1,6 @@
+
 session.session
 session.session-journal
+
+.venv/
+
