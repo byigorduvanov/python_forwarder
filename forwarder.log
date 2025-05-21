@@ -38,3 +38,44 @@ Traceback (most recent call last):
     urls = extract_all_links(event.message)
 NameError: name 'extract_all_links' is not defined
 nohup: ignoring input
+nohup: ignoring input
+nohup: failed to run command 'python': No such file or directory
+nohup: ignoring input
+nohup: failed to run command 'python': No such file or directory
+nohup: ignoring input
+nohup: failed to run command 'python': No such file or directory
+nohup: ignoring input
+nohup: failed to run command 'python': No such file or directory
+-bash: root@vm4005921:/opt/telethon_forwarder#: No such file or directory
+-bash: root@vm4005921:/opt/telethon_forwarder#: No such file or directory
+[1]: command not found
+nohup: ignoring input
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/opt/telethon_forwarder/forwarder.py", line 236, in <module>
+    with client:
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/helpers.py", line 184, in _sync_enter
+    return loop.run_until_complete(self.__aenter__())
+  File "/usr/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/client/auth.py", line 713, in __aenter__
+    return await self.start()
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/client/auth.py", line 140, in _start
+    await self.connect()
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/client/telegrambaseclient.py", line 536, in connect
+    self.session.auth_key = self._sender.auth_key
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/sessions/sqlite.py", line 180, in auth_key
+    self._update_session_table()
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/sessions/sqlite.py", line 194, in _update_session_table
+    c.execute('delete from sessions')
+sqlite3.OperationalError: database is locked
+Task was destroyed but it is pending!
+task: <Task pending name='Task-3' coro=<Connection._send_loop() running at /opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/network/connection/connection.py:306> wait_for=<Future pending cb=[<TaskWakeupMethWrapper object at 0x7fd0b1a91490>()]>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-4' coro=<Connection._recv_loop() running at /opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/network/connection/connection.py:324> wait_for=<Future pending cb=[<TaskWakeupMethWrapper object at 0x7fd0b1a91550>()]>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-5' coro=<MTProtoSender._send_loop() running at /opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/network/mtprotosender.py:460> wait_for=<Future pending cb=[<TaskWakeupMethWrapper object at 0x7fd0b1a91670>()]>>
+Task was destroyed but it is pending!
+task: <Task pending name='Task-6' coro=<MTProtoSender._recv_loop() running at /opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/network/mtprotosender.py:503> wait_for=<Future pending cb=[<TaskWakeupMethWrapper object at 0x7fd0b1a916a0>()]>>
+nohup: ignoring input
+nohup: ignoring input
