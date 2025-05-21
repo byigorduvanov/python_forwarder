@@ -4,3 +4,5 @@ session.session-journal
 
 .venv/
 
+session.session
+session.session-journal
