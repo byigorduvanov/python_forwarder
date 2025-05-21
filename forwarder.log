@@ -1,0 +1,40 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "forwarder.py", line 1, in <module>
+    cat << 'EOF' > forwarder.py
+NameError: name 'cat' is not defined
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+nohup: ignoring input
+  File "forwarder.py", line 81
+    await client.send_message(dst, final, parse_mode='html')
+    ^
+SyntaxError: invalid syntax
+nohup: ignoring input
+  File "forwarder.py", line 104
+    async def handler(event):
+          ^
+SyntaxError: invalid syntax
+nohup: ignoring input
+Unhandled exception on handler
+Traceback (most recent call last):
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/client/updates.py", line 570, in _dispatch_update
+    await callback(event)
+  File "/opt/telethon_forwarder/forwarder.py", line 71, in handler
+    urls = extract_all_links(event.message)
+NameError: name 'extract_all_links' is not defined
+Unhandled exception on handler
+Traceback (most recent call last):
+  File "/opt/telethon_forwarder/.venv/lib/python3.9/site-packages/telethon/client/updates.py", line 570, in _dispatch_update
+    await callback(event)
+  File "/opt/telethon_forwarder/forwarder.py", line 71, in handler
+    urls = extract_all_links(event.message)
+NameError: name 'extract_all_links' is not defined
+nohup: ignoring input
