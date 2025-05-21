@@ -92,22 +92,48 @@ def process_2407118810(text, urls):
 def process_2354753954(text, urls):
     lines = []
     for line in text.splitlines():
-        # відсікаємо бонусні лінки й підтримку
         low = line.lower()
-        if 'бонус' in low or 'силка' in low or 'поддерж' in low:
+
+        block_keywords = ('бонус', 'ссыл', 'силка', 'поддерж', 'підтрим')
+        if any(kw in low for kw in block_keywords):
             continue
 
-        # заміна Trade: Bybit → HTML-лінк
-        if 'Trade: Bybit' in line:
+        # обгортаємо тикер у backticks, якщо потрібно (аналогічно MEXC)
+        m = re.match(r'(#bybit_[^:]+:\s*)(\S+)', line, flags=re.IGNORECASE)
+        if m:
+            prefix, ticker = m.groups()
+            line = f"{prefix}`{ticker}`"
+
+        # заміна Trade: Bybit → Markdown-лінк
+        if 'trade: bybit' in low:
             url = next((u for u in urls if 'bybit.com' in u), None)
             if url:
                 clean_url = url.split('?')[0]
-                line = line.replace(
-                    'Trade: Bybit',
-                    f'Trade: <a href="{clean_url}">Bybit</a>'
+                # тут використовуємо [Bybit](url)
+                line = re.sub(
+                    r'(?i)Trade:\s*Bybit',
+                    f'Trade: [Bybit]({clean_url})',
+                    line
                 )
 
         lines.append(line)
+    return "\n".join(lines)
+
+
+
+
+#ліквідації
+
+def process_bybit_liquidations(text, urls):
+    """
+    Спеціальна обробка для Bybit Liquidations:
+    - прибираємо останній рядок з бонусними ссылками та поддержкой
+    - (за потреби можна додати інші трансформації)
+    """
+    lines = text.splitlines()
+    # якщо останній рядок містить "бонус" або "поддерж", відсікаємо його
+    if lines and any(kw in lines[-1].lower() for kw in ("бонус", "ссыл", "поддерж")):
+        lines = lines[:-1]
     return "\n".join(lines)
 
 
@@ -118,25 +144,50 @@ def process_general(text):
 
 # Главный хендлер
 
+# ID каналів
+MEXC_SRC               = -1002407118810
+BYBIT_DUMP_SRC         = -1002354753954
+BYBIT_LIQUIDATION_SRC  = -1002579369940
+
 @client.on(events.NewMessage(chats=list(mapping.keys())))
 async def handler(event):
-    src = event.chat_id
-    dst = mapping[src]
-    text = event.message.message or ""
+    src  = event.chat_id
+    dst  = mapping[src]
+    text = (event.message.message or "").strip()
     urls = extract_all_links(event.message)
 
-    if src == -1006620270004:
-        final = process_6620270004(text, urls)
-    elif src == -1002407118810:
+    # MEXC: тільки якщо починається з "#mexc"
+    if src == MEXC_SRC:
+        if not text.lower().startswith("#mexc"):
+            return  # ігноруємо
         final = process_2407118810(text, urls)
-    elif src == -1002354753954:
+
+    # Bybit Dump: тільки якщо починається з "#bybit"
+    elif src == BYBIT_DUMP_SRC:
+        if not text.lower().startswith("#bybit"):
+            return
         final = process_2354753954(text, urls)
+
+        # Bybit Liquidations: тільки якщо починається з "🔴" або "🟢"
+    elif src == BYBIT_LIQUIDATION_SRC:
+        if not (text.startswith("🔴") or text.startswith("🟢")):
+            return
+        final = process_bybit_liquidations(text, urls)
+
+    # Арбітраж
+    elif src == -1006620270004:
+        final = process_6620270004(text, urls)
+
+    # Інші (general)
     elif src in (-1002638772677, -1002632064203):
         final = process_general(text)
+
     else:
         final = text
 
     await client.send_message(dst, final, parse_mode='md', link_preview=False)
+
+
 
 # Запуск клиента
 
