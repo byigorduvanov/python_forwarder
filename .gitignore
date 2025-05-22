@@ -1,3 +1,6 @@
 
 .venv/
+
+session.session
+session.session-journal
 .idea/
