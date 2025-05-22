@@ -132,26 +132,26 @@ def process_2407118810(text, urls):
         if should_block_line(line):
             continue
 
-        # видаляємо Weex і зайві вертикальні риски
+        # Убираем Weex и лишние |
         line = line.replace("Weex", "").replace("|", "").strip()
 
-        # обгортаємо ticker у backticks
+        # Оборачиваем тикер
         m = re.match(r'(#mexc_[^:]+:\s*)(\S+)', line, flags=re.IGNORECASE)
         if m:
             prefix, ticker = m.groups()
             line = f"{prefix}`{ticker}`"
 
-        # заміна Trade: Mexc → Markdown-лінк
+        # Заменяем Trade: Mexc на Markdown-линк + реферальный код
         if 'Trade: Mexc' in line:
+            # Берём первую ссылку на mexc из списка
             url = next((u for u in urls if 'mexc.com' in u), None)
             if url:
-                clean_url = url.split('?')[0]
-                # ЗАМІНА тут — пишемо Markdown-лінк, а не HTML
+                clean = url.split('?', 1)[0]
+                with_ref = append_referral(clean, 'mexc')
                 line = line.replace(
                     'Trade: Mexc',
-                    f'Trade: [Mexc]({clean_url})'
+                    f"Trade: [Mexc]({with_ref})"
                 )
-
         lines.append(line)
     return "\n".join(lines)
 
@@ -162,29 +162,26 @@ def process_2354753954(text, urls):
     lines = []
     for line in text.splitlines():
         low = line.lower()
-
-        block_keywords = ('бонус', 'ссыл', 'силка', 'поддерж', 'підтрим')
-        if any(kw in low for kw in block_keywords):
+        if any(kw in low for kw in ('бонус', 'ссыл', 'силка', 'поддерж', 'підтрим')):
             continue
 
-        # обгортаємо тикер у backticks, якщо потрібно (аналогічно MEXC)
+        # Оборачиваем тикер, если нужно
         m = re.match(r'(#bybit_[^:]+:\s*)(\S+)', line, flags=re.IGNORECASE)
         if m:
             prefix, ticker = m.groups()
             line = f"{prefix}`{ticker}`"
 
-        # заміна Trade: Bybit → Markdown-лінк
+        # Заменяем Trade: Bybit на Markdown-линк + реферальный код
         if 'trade: bybit' in low:
             url = next((u for u in urls if 'bybit.com' in u), None)
             if url:
-                clean_url = url.split('?')[0]
-                # тут використовуємо [Bybit](url)
+                clean = url.split('?', 1)[0]
+                with_ref = append_referral(clean, 'bybit')
                 line = re.sub(
                     r'(?i)Trade:\s*Bybit',
-                    f'Trade: [Bybit]({clean_url})',
+                    f"Trade: [Bybit]({with_ref})",
                     line
                 )
-
         lines.append(line)
     return "\n".join(lines)
 
