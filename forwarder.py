@@ -50,8 +50,8 @@ def should_block_line(line: str) -> bool:
 # Реферальные параметры для каждой биржи (ключ — название в lower-case)
 REFERRAL_PARAMS = {
     "lbank":    ("ref",           "4XEVI"),
-    "bybit":    ("ref",           "YAk-zareyestruvatisya-na-b%D1%96rzh%D1%96-Bajb%D1%96t-ta-otrimati-bonusi-01-23"),
-    "okx":      ("ref",           "YAk-zareyestruvatisya-na-OKX-ta-otrimati-bonusi-01-22"),
+    "bybit":    ("ref_code",      "71984"),
+    "okx":      (None,            "ua/join/25436408"),
     "kucoin":   ("r",             "af/rPC2UVN"),
     "mexc":     ("inviteCode",    "12GYmQ"),
     "bitget":   ("ref",           "u/4CS395UZ"),
