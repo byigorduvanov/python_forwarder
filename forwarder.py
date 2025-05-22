@@ -46,15 +46,46 @@ def should_block_line(line: str) -> bool:
     ]
     return any(x.lower() in line.lower() for x in blocked)
 
+
+# Реферальные параметры для каждой биржи (ключ — название в lower-case)
+REFERRAL_PARAMS = {
+    "lbank":    ("ref",           "4XEVI"),
+    "bybit":    ("ref",           "YAk-zareyestruvatisya-na-b%D1%96rzh%D1%96-Bajb%D1%96t-ta-otrimati-bonusi-01-23"),
+    "okx":      ("ref",           "YAk-zareyestruvatisya-na-OKX-ta-otrimati-bonusi-01-22"),
+    "kucoin":   ("r",             "af/rPC2UVN"),
+    "mexc":     ("inviteCode",    "12GYmQ"),
+    "bitget":   ("ref",           "u/4CS395UZ"),
+    "bingx":    ("invite",        "WBU7DG"),
+    "huobi":    ("invite_code",   "jadv5223"),
+    "gateio":   ("ref_type",      "103"),
+    "whitebit": ("referral",      "2603b5d0-55b7-49a0-b202-db326e322d9d"),
+}
+
+def append_referral(url: str, exch: str) -> str:
+    """
+    К добавляет к url из exchange_urls параметр из REFERRAL_PARAMS[exch].
+    Сохраняет уже существующие query-параметры.
+    """
+    key_code = REFERRAL_PARAMS.get(exch.lower())
+    if not key_code:
+        return url
+    key, code = key_code
+    base, *rest = url.split("?", 1)
+    existing = rest[0] if rest else ""
+    ref = f"{key}={code}"
+    new_query = f"{existing}&{ref}" if existing else ref
+    return f"{base}?{new_query}"
+
 # Обработка арбитражного канала
 
+# Обработка арбитражного канала
 def process_6620270004(text, urls):
     lines_out = []
     all_lines = text.splitlines()
     if not all_lines:
         return ""
 
-    # 1) Перший рядок — wrap ticker, не змінюємо
+    # Первую строку — wrap тикер
     first = all_lines[0].strip()
     m = re.match(r'^([^:\s]+):\s*(.*)', first)
     if m:
@@ -63,27 +94,28 @@ def process_6620270004(text, urls):
     else:
         lines_out.append(first)
 
-    # 2) Дістаємо в порядку появи біржі з |exchange|
+    # Собираем список бирж по |exchange|
     exchange_tokens = re.findall(r'\|([^|]+)\|', text)
+    exchange_urls   = dict(zip(exchange_tokens, urls))
 
-    # 3) Просто зшиваємо exchange_tokens та urls по відповідних індексах
-    exchange_urls = dict(zip(exchange_tokens, urls))
-
-    # 4) Обробляємо рядки-стікери і всі інші
+    # Обрабатываем остальные строки
     for line in all_lines[1:]:
         low = line.lower().strip()
 
-        # стоп-слова і "графік"/📈
-        if should_block_line(line) or "графік" in low or line.startswith("📈"):
+        # фильтруем стоп-слова и "график"/📈
+        if should_block_line(line) or "график" in low or line.startswith("📈"):
             continue
 
-        # рядок-стікер?
         m2 = re.match(r'^(\S+)\s*\|([^|]+)\|\s*-\s*(.+)', line)
         if m2:
             emoji, exch, action = m2.groups()
-            url = exchange_urls.get(exch, "")
-            clean = url.split('?')[0] if url else ""
-            md_link = f"[{exch}]({clean})" if clean else exch
+            raw = exchange_urls.get(exch, "")
+            if raw:
+                clean      = raw.split('?', 1)[0]
+                with_ref   = append_referral(clean, exch)
+                md_link    = f"[{exch}]({with_ref})"
+            else:
+                md_link = exch
             line = f"{emoji} |{md_link}| - {action}"
 
         lines_out.append(line)
