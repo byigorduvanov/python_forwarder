@@ -286,22 +286,35 @@ NEW_SRC = -1002800273881
 # Глобальний словник для зв'язку оригінал → переслане повідомлення
 forwarded_map: dict[tuple[int,int], int] = {}
 # Словник винятків для реплаїв
+# Словник винятків для реплаїв
 REPLY_OVERRIDES = {
-    "Немного не достаем до цели":      "Трохи не дотягуємо до цілі",
-    "Фиксируем сейчас 25% позиции":    "Фіксуємо зараз 25% позиції",
-    "Забираем первую цель":            "Забираємо першу ціль",
-    "Первая цель есть":                "Перша ціль досягнута",
-    "Забрали вторую цель":             "Забрали другу ціль",
-    "Еще 25% позиции":                 "Ще 25% позиції",
-    "Закрылись в бу":                  "Закрилися в б/з",
+    "Немного не достаем до цели":      "перший тейк, стоп в б/з",
+    "Фиксируем сейчас 25% позиции":    None,
+    "Забираем первую цель":            "другий тейк",
+    "Первая цель есть":                "третій тейк",
+    "Забрали вторую цель":             "четвертий тейк",
+    "Зафиксировал ещё 25% позиции":    None,
+    "Еще 25% позиции":                 None,
+    "Закрылись в бу":                  "стоп в б/з",
+    "Тейк":                  "Тейк",
+    "✔️Забрали вторую цель":                  "Другий тейк",
 }
 
 def process_reply(text: str) -> str:
-    out = text
-    for ru, uk in REPLY_OVERRIDES.items():
-        # замінюємо всі входження
-        out = re.sub(re.escape(ru), uk, out)
-    return out
+    """
+    Збираємо з вхідного text тільки ті рядки, які є в REPLY_OVERRIDES
+    і в яких значення не None. Решту ігноруємо.
+    """
+    out_lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped in REPLY_OVERRIDES:
+            uk = REPLY_OVERRIDES[stripped]
+            if uk:
+                out_lines.append(uk)
+            # якщо uk is None — пропускаємо цю рядок
+    return "\n".join(out_lines)
+
 
 @client.on(events.NewMessage(chats=list(mapping.keys())))
 async def handler(event):
@@ -309,49 +322,45 @@ async def handler(event):
     dst = mapping[src]
     text = (event.message.message or "").strip()
 
-    # 1) Реплаї завжди обробляємо першими
+    # 1) Реплай — обробляємо винятками
     if event.message.reply_to_msg_id:
         final = process_reply(text)
+        # якщо нічого не залишилося — ігноруємо весь event
+        if not final:
+            return
 
-    # 2) Нові сигнали в NEW_SRC — тільки якщо точно за шаблоном “😘 Новая сделка | $…”
+    # 2) Нові сигнали в NEW_SRC
     elif src == NEW_SRC:
         if re.match(r'^😘\s*Новая сделка\s*\|\s*\$\w+', text):
             final = process_new_signal(text)
         else:
-            # будь-які інші повідомлення в цьому каналі ігноруємо
             return
 
-    # 3) Усі інші канали — звична логіка з рефками, стоп-словами тощо
+    # 3) Інші канали — ваша існуюча логіка
     else:
         urls = extract_all_links(event.message)
-
         if src == MEXC_SRC:
             if not text.lower().startswith("#mexc"):
                 return
             final = process_2407118810(text, urls)
-
         elif src == BYBIT_DUMP_SRC:
             if not text.lower().startswith("#bybit"):
                 return
             final = process_2354753954(text, urls)
-
         elif src == BYBIT_LIQUIDATION_SRC:
             if not (text.startswith("🔴") or text.startswith("🟢")):
                 return
             final = process_bybit_liquidations(text, urls)
-
         elif src == ARB_SRC:
             final = process_6620270004(text, urls)
-
         else:
             final = process_general(text)
 
-    # 4) Визначаємо, на яке саме переслане повідомлення треба відповісти (якщо є)
+    # Після отримання final — пересилаємо і зберігаємо мапінг для реплаїв
     reply_to_id = None
     if event.message.reply_to_msg_id:
         reply_to_id = forwarded_map.get((src, event.message.reply_to_msg_id))
 
-    # 5) Пересилаємо відформатований текст і зберігаємо мапінг для майбутніх реплаїв
     sent = await client.send_message(
         dst,
         final,
