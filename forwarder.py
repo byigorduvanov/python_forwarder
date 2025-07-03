@@ -202,40 +202,112 @@ def process_bybit_liquidations(text, urls):
         lines = lines[:-1]
     return "\n".join(lines)
 
+def process_new_signal(text: str) -> str:
+    """
+    Приводим сигнал вида:
+      😘 Новая сделка | $NEAR
+      Направление: SHORT
+      Вход: [2.2950 - 2.3245]
+      Тейк: 2.2820/ 2.2450/ 2.2111/ 2.1679
+      Стоп: 2.3854(3.15%)
+      …
+    в формат:
+      $NEAR
 
+      Напрямок:  Short
+
+      👉 Вхід: маркет  [2.2950 - 2.3245]
+
+      ✅ Тейк: 2.2820/ 2.2450/ 2.2111/ 2.1679
+
+      ❌ Стоп: 2.3854
+
+      Стоп у відсотках: 3.15%
+
+      РИЗИК 5%
+
+      Після першого тейку ставимо стоп в б/з.
+    """
+    # символ
+    sym = re.search(r'Новая сделка\s*\|\s*(\$\w+)', text)
+    symbol = sym.group(1) if sym else ''
+
+    # направление
+    dir_ = re.search(r'Направление:\s*(\w+)', text)
+    direction = dir_.group(1).capitalize() if dir_ else ''
+
+    # вход
+    ent = re.search(r'Вход:\s*\[([^\]]+)\]', text)
+    entry = ent.group(1) if ent else ''
+
+    # тейк
+    tk = re.search(r'Тейк:\s*([^\n]+)', text)
+    take = tk.group(1).strip() if tk else ''
+
+    # стоп-цена
+    st = re.search(r'Стоп:\s*([\d.]+)', text)
+    stop_price = st.group(1) if st else ''
+
+    # стоп-процент
+    sp = re.search(r'Стоп:[^\(]*\(([\d.]+)%\)', text)
+    stop_pct = sp.group(1) + '%' if sp else ''
+
+    risk = '5%'  # жестко задано, как вы просили
+
+    return (
+        f"{symbol}\n\n"
+        f"Напрямок:  {direction}\n\n"
+        f"👉 Вхід: маркет  [{entry}]\n\n"
+        f"✅ Тейк: {take}\n\n"
+        f"❌ Стоп: {stop_price}\n\n"
+        f"Стоп у відсотках: {stop_pct}\n\n"
+        f"РИЗИК {risk}\n\n"
+        "Після першого тейку ставимо стоп в б/з."
+    )
 # Универсальная обработка
 
 def process_general(text):
     return "\n".join(line for line in text.splitlines() if not should_block_line(line))
 
-# Главный хендлер
+
 
 # ID каналів
 ARB_SRC                = 6620270004
 MEXC_SRC               = -1002407118810
 BYBIT_DUMP_SRC         = -1002354753954
 BYBIT_LIQUIDATION_SRC  = -1002579369940
+NEW_SRC = -1002800273881
 
+
+# Главный хендлер
 @client.on(events.NewMessage(chats=list(mapping.keys())))
 async def handler(event):
-    src  = event.chat_id
-    dst  = mapping[src]
+    src = event.chat_id
+    dst = mapping[src]  # беремо кінцевий канал з mapping
     text = (event.message.message or "").strip()
+
+    # 1) Якщо це новий канал — обробляємо через process_new_signal
+    if src == NEW_SRC:
+        final = process_new_signal(text)
+        await client.send_message(dst, final, parse_mode='md', link_preview=False)
+        return
+
+    # 2) Для всіх інших беремо посилання
     urls = extract_all_links(event.message)
 
-    # MEXC: тільки якщо починається з "#mexc"
+    # MEXC
     if src == MEXC_SRC:
         if not text.lower().startswith("#mexc"):
-            return  # ігноруємо
+            return
         final = process_2407118810(text, urls)
 
-    # Bybit Dump: тільки якщо починається з "#bybit"
+    # Bybit dump
     elif src == BYBIT_DUMP_SRC:
         if not text.lower().startswith("#bybit"):
             return
         final = process_2354753954(text, urls)
 
-        # Bybit Liquidations: тільки якщо починається з "🔴" або "🟢"
+    # Bybit liquidations
     elif src == BYBIT_LIQUIDATION_SRC:
         if not (text.startswith("🔴") or text.startswith("🟢")):
             return
@@ -245,13 +317,15 @@ async def handler(event):
     elif src == ARB_SRC:
         final = process_6620270004(text, urls)
 
-    # Інші (general)
+    # Інші “general”
     elif src in (-1002638772677, -1002632064203):
         final = process_general(text)
 
     else:
+        # Якщо якийсь незапланований чат
         final = text
 
+    # І відправляємо
     await client.send_message(dst, final, parse_mode='md', link_preview=False)
 
 
@@ -264,5 +338,6 @@ async def main():
 if __name__ == '__main__':
     with client:
         client.loop.run_until_complete(main())
+
 
 
