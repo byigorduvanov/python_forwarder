@@ -3,6 +3,7 @@ from telethon import TelegramClient, events
 from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
 import config
 
+
 # Инициализация клиента с или без прокси
 if config.PROXY:
     client = TelegramClient('session', config.API_ID, config.API_HASH, proxy=config.PROXY)
@@ -280,53 +281,86 @@ NEW_SRC = -1002800273881
 
 
 # Главный хендлер
+# Словник винятків для реплаїв
+
+# Глобальний словник для зв'язку оригінал → переслане повідомлення
+forwarded_map: dict[tuple[int,int], int] = {}
+# Словник винятків для реплаїв
+REPLY_OVERRIDES = {
+    "Немного не достаем до цели":      "Трохи не дотягуємо до цілі",
+    "Фиксируем сейчас 25% позиции":    "Фіксуємо зараз 25% позиції",
+    "Забираем первую цель":            "Забираємо першу ціль",
+    "Первая цель есть":                "Перша ціль досягнута",
+    "Забрали вторую цель":             "Забрали другу ціль",
+    "Еще 25% позиции":                 "Ще 25% позиції",
+    "Закрылись в бу":                  "Закрилися в б/з",
+}
+
+def process_reply(text: str) -> str:
+    out = text
+    for ru, uk in REPLY_OVERRIDES.items():
+        # замінюємо всі входження
+        out = re.sub(re.escape(ru), uk, out)
+    return out
+
 @client.on(events.NewMessage(chats=list(mapping.keys())))
 async def handler(event):
     src = event.chat_id
-    dst = mapping[src]  # беремо кінцевий канал з mapping
+    dst = mapping[src]
     text = (event.message.message or "").strip()
 
-    # 1) Якщо це новий канал — обробляємо через process_new_signal
-    if src == NEW_SRC:
-        final = process_new_signal(text)
-        await client.send_message(dst, final, parse_mode='md', link_preview=False)
-        return
+    # 1) Реплаї завжди обробляємо першими
+    if event.message.reply_to_msg_id:
+        final = process_reply(text)
 
-    # 2) Для всіх інших беремо посилання
-    urls = extract_all_links(event.message)
-
-    # MEXC
-    if src == MEXC_SRC:
-        if not text.lower().startswith("#mexc"):
+    # 2) Нові сигнали в NEW_SRC — тільки якщо точно за шаблоном “😘 Новая сделка | $…”
+    elif src == NEW_SRC:
+        if re.match(r'^😘\s*Новая сделка\s*\|\s*\$\w+', text):
+            final = process_new_signal(text)
+        else:
+            # будь-які інші повідомлення в цьому каналі ігноруємо
             return
-        final = process_2407118810(text, urls)
 
-    # Bybit dump
-    elif src == BYBIT_DUMP_SRC:
-        if not text.lower().startswith("#bybit"):
-            return
-        final = process_2354753954(text, urls)
-
-    # Bybit liquidations
-    elif src == BYBIT_LIQUIDATION_SRC:
-        if not (text.startswith("🔴") or text.startswith("🟢")):
-            return
-        final = process_bybit_liquidations(text, urls)
-
-    # Арбітраж
-    elif src == ARB_SRC:
-        final = process_6620270004(text, urls)
-
-    # Інші “general”
-    elif src in (-1002638772677, -1002632064203):
-        final = process_general(text)
-
+    # 3) Усі інші канали — звична логіка з рефками, стоп-словами тощо
     else:
-        # Якщо якийсь незапланований чат
-        final = text
+        urls = extract_all_links(event.message)
 
-    # І відправляємо
-    await client.send_message(dst, final, parse_mode='md', link_preview=False)
+        if src == MEXC_SRC:
+            if not text.lower().startswith("#mexc"):
+                return
+            final = process_2407118810(text, urls)
+
+        elif src == BYBIT_DUMP_SRC:
+            if not text.lower().startswith("#bybit"):
+                return
+            final = process_2354753954(text, urls)
+
+        elif src == BYBIT_LIQUIDATION_SRC:
+            if not (text.startswith("🔴") or text.startswith("🟢")):
+                return
+            final = process_bybit_liquidations(text, urls)
+
+        elif src == ARB_SRC:
+            final = process_6620270004(text, urls)
+
+        else:
+            final = process_general(text)
+
+    # 4) Визначаємо, на яке саме переслане повідомлення треба відповісти (якщо є)
+    reply_to_id = None
+    if event.message.reply_to_msg_id:
+        reply_to_id = forwarded_map.get((src, event.message.reply_to_msg_id))
+
+    # 5) Пересилаємо відформатований текст і зберігаємо мапінг для майбутніх реплаїв
+    sent = await client.send_message(
+        dst,
+        final,
+        parse_mode='md',
+        link_preview=False,
+        reply_to=reply_to_id
+    )
+    forwarded_map[(src, event.message.id)] = sent.id
+
 
 
 # Запуск клиента
