@@ -2,7 +2,13 @@ import re
 from telethon import TelegramClient, events
 from telethon.tl.types import MessageEntityTextUrl, MessageEntityUrl
 import config
-
+from telethon import functions
+from telethon.tl.types import InputPeerChannel
+from telethon.tl.functions.messages import SendMessageRequest
+from telethon.tl.types import InputPeerChannel
+from typing import Optional
+from telethon.tl.types import InputPeerChannel
+from telethon.tl.functions.messages import SendMessageRequest
 
 # Инициализация клиента с или без прокси
 if config.PROXY:
@@ -223,7 +229,11 @@ NEW_SRC = -1002800273881
 # 5) Головний хендлер
 # ----------------------------------------------------------------
 # Зберігаємо, на яке повідомлення в destination ми відповідаємо для кожного символу
+
 symbol_to_msgid: dict[str,int] = {}
+
+
+
 
 # 1) Універсальна функція для діставання ключа (без “.P” і “/”)
 def extract_key(text: str) -> str:
@@ -291,46 +301,70 @@ def process_cornix_stop(text: str) -> tuple[str, str]:
         label = "Стоп"
     return key, label
 
-# 6) Окремий handler тільки для Cornix-каналу
+
 @client.on(events.NewMessage(chats=[NEW_SRC]))
 async def cornix_handler(event):
     dst  = mapping[NEW_SRC]
     text = (event.message.message or "").strip()
 
-    # 6.1) Перший сигнал
+    # 1) Перший сигнал — відповідаємо на повідомлення із ID=config.TOPIC_ID,
+    # щоб опублікувати новий топік-пост
     if "Entry Zone" in text:
         sym, out = process_cornix_initial(text)
-        sent = await client.send_message(dst, out, parse_mode='md', link_preview=False)
+        sent = await client.send_message(
+            dst,
+            out,
+            parse_mode='md',
+            link_preview=False,
+            reply_to=config.TOPIC_ID
+        )
         symbol_to_msgid[sym] = sent.id
-        print(f"[DEBUG] Записано символ {sym} з msg_id = {sent.id}")
         return
 
-    # 6.2) Одиночний тейк
+    # 2) Одиночний тейк — відповідаємо на збережений msg_id
     if "Take-Profit target" in text and "✅" in text:
         sym, out = process_cornix_take(text)
         to_id = symbol_to_msgid.get(sym)
-        print(f"[DEBUG] Take-повідомлення для {sym}, знайдений msg_id = {to_id}")
         if to_id:
-            await client.send_message(dst, out, parse_mode='md', link_preview=False, reply_to=to_id)
+            await client.send_message(
+                dst,
+                out,
+                parse_mode='md',
+                link_preview=False,
+                reply_to=to_id
+            )
         return
 
-    # 6.3) Всі тейки
+    # 3) Всі тейки
     if "All take-profit targets" in text:
         sym, out = process_cornix_all_take(text)
         to_id = symbol_to_msgid.get(sym)
-        print(f"[DEBUG] All-takes для {sym}, msg_id = {to_id}")
         if to_id:
-            await client.send_message(dst, out, parse_mode='md', link_preview=False, reply_to=to_id)
+            await client.send_message(
+                dst,
+                out,
+                parse_mode='md',
+                link_preview=False,
+                reply_to=to_id
+            )
         return
 
-    # 6.4) Стоп-лосс
+    # 4) Стоп-лосс / стоп в беззбитку
     if any(kw in text for kw in ("Stop-Loss", "Stop Target Hit", "Closed at stoploss")):
         sym, out = process_cornix_stop(text)
         to_id = symbol_to_msgid.get(sym)
-        print(f"[DEBUG] Стоп для {sym}, msg_id = {to_id}")
         if to_id:
-            await client.send_message(dst, out, parse_mode='md', link_preview=False, reply_to=to_id)
+            await client.send_message(
+                dst,
+                out,
+                parse_mode='md',
+                link_preview=False,
+                reply_to=to_id
+            )
         return
+
+
+
 
 # 4) Загальний хендлер для інших каналів залишається без змін, але не обробляє NEW_SRC
 @client.on(events.NewMessage(chats=list(mapping.keys())))
