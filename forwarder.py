@@ -216,89 +216,8 @@ BYBIT_LIQUIDATION_SRC  = -1002579369940
 NEW_SRC = -1002800273881
 
 
-# Главный хендлер
-# Зберігаємо, на яке повідомлення в destination ми відповідаємо для кожного символу
-symbol_to_msgid: dict[str,int] = {}
+# Централізована функція для діставання символу без “.P” і “/”
 
-def process_cornix_initial(text: str) -> tuple[str,str]:
-    """
-    Парсить первинне Cornix-повідомлення з Entry Zone, Targets і Stop-Loss,
-    і повертає кортеж (symbol, formatted_text), де formatted_text має саме такий
-    вигляд:
-
-    $WOO
-
-    Напрямок:  Short
-
-    👉 Вхід: маркет  [0.06635 - 0.06730]
-
-    ✅ Тейк: 0.06592/ 0.06494/ 0.06410/ 0.06328
-
-    ❌ Стоп: 0.06856
-
-    Стоп у відсотках: 2.34%
-
-    РИЗИК 5%
-
-    Після першого тейку ставимо стоп в б/з.
-    """
-    # 1) Витягуємо тікер без суфікса .P
-    m = re.search(r'#([A-Z0-9/]+?)(?:\.P)?\b', text)
-    raw_symbol = m.group(1) if m else ""
-    symbol = f"${raw_symbol}"
-
-    # 2) Напрямок
-    dir_m = re.search(r'\b(Short|Long)\b', text)
-    direction = dir_m.group(1).capitalize() if dir_m else ""
-
-    # 3) Вхід
-    entry_m = re.search(r'Entry Zone:\s*([\d\.]+\s*-\s*[\d\.]+)', text)
-    entry = entry_m.group(1) if entry_m else ""
-
-    # 4) Список тейків
-    takes = re.findall(r'Target\s*\d+:\s*([\d\.]+)', text)
-    takes_str = "/ ".join(takes) if takes else ""
-
-    # 5) Стоп-лосс
-    stop_m = re.search(r'Stop-Loss:\s*([\d\.]+)', text)
-    stop_price = stop_m.group(1) if stop_m else ""
-
-
-
-    formatted = (
-        f"{symbol}\n\n"
-        f"Напрямок:  {direction}\n\n"
-        f"👉 Вхід: маркет  [{entry}]\n\n"
-        f"✅ Тейк: {takes_str}\n\n"
-        f"❌ Стоп: {stop_price}\n\n"
-        f"РИЗИК 5%\n\n"
-        "Після першого тейку ставимо стоп в б/з."
-    )
-    return symbol, formatted
-
-def process_cornix_take(text: str) -> tuple[str,str]:
-    """
-    Парсить Take-Profit target N ✅
-    """
-    # знайдемо символ
-    sym_m = re.search(r'#([A-Z0-9/\.]+)', text)
-    symbol = sym_m.group(1) if sym_m else ""
-    # знайдемо N
-    n_m = re.search(r'Take-Profit target\s*(\d+)', text)
-    n = int(n_m.group(1)) if n_m else 0
-    names = {1:"перший тейк",2:"другий тейк",3:"третій тейк",4:"четвертий тейк"}
-    label = names.get(n, f"{n}-й тейк")
-    return symbol, label
-
-def process_cornix_all_take(text:str) -> tuple[str,str]:
-    sym_m = re.search(r'#([A-Z0-9/\.]+)', text)
-    symbol = sym_m.group(1) if sym_m else ""
-    return symbol, "Усі тейки ✅"
-
-def process_cornix_stop(text:str) -> tuple[str,str]:
-    sym_m = re.search(r'#([A-Z0-9/\.]+)', text)
-    symbol = sym_m.group(1) if sym_m else ""
-    return symbol, "Стоп в б/з ⛔"
 
 # ----------------------------------------------------------------
 # 5) Головний хендлер
@@ -306,62 +225,138 @@ def process_cornix_stop(text:str) -> tuple[str,str]:
 # Зберігаємо, на яке повідомлення в destination ми відповідаємо для кожного символу
 symbol_to_msgid: dict[str,int] = {}
 
-@client.on(events.NewMessage(chats=list(mapping.keys())))
-async def handler(event):
-    src  = event.chat_id
-    dst  = mapping[src]
+# 1) Універсальна функція для діставання ключа (без “.P” і “/”)
+def extract_key(text: str) -> str:
+    # Знайдемо найперший хештег: #NEARUSDT.P або #NEAR/USDT або #NEARUSDT
+    m = re.search(r'#([A-Z0-9]+/?[A-Z0-9]+)(?:\.P)?', text)
+    raw = m.group(1) if m else ""
+    return raw.replace('/', '')
+
+
+# 2) Парсинг першого сигналу
+def process_cornix_initial(text: str) -> tuple[str, str]:
+    key = extract_key(text)
+
+    dir_m = re.search(r'\b(Short|Long)\b', text)
+    direction = dir_m.group(1).capitalize() if dir_m else ""
+
+    entry_m = re.search(r'Entry Zone:\s*([\d\.]+\s*-\s*[\d\.]+)', text)
+    entry = entry_m.group(1) if entry_m else ""
+
+    takes = re.findall(r'Target\s*\d+:\s*([\d\.]+)', text)
+    takes_str = "/ ".join(takes) if takes else ""
+
+    stop_m = re.search(r'Stop-Loss:\s*([\d\.]+)', text)
+    stop_price = stop_m.group(1) if stop_m else ""
+
+    formatted = (
+        f"${key}\n\n"
+        f"Напрямок:  {direction}\n\n"
+        f"👉 Вхід: маркет  [{entry}]\n\n"
+        f"✅ Тейк: {takes_str}\n\n"
+        f"❌ Стоп: {stop_price}\n\n"
+        f"РИЗИК 5%\n\n"
+        "Після першого тейку ставимо стоп в б/з."
+    )
+    return key, formatted
+
+
+# 3) Парсинг одиночного тейка
+def process_cornix_take(text: str) -> tuple[str, str]:
+    key = extract_key(text)
+    n_m = re.search(r'Take-Profit target\s*(\d+)', text)
+    n = int(n_m.group(1)) if n_m else 0
+    names = {1:"Перший тейк", 2:"Другий тейк", 3:"Третій тейк", 4:"Четвертий тейк"}
+    label = names.get(n, f"{n}-й тейк")
+    return key, label
+
+# 4) Парсинг “All take-profit targets”
+def process_cornix_all_take(text: str) -> tuple[str, str]:
+    key = extract_key(text)
+    return key, "Тейк ✅"
+
+# 5) Парсинг стоп-лосс
+def process_cornix_stop(text: str) -> tuple[str, str]:
+    """
+    Розрізняє два види стопів:
+     - Closed at stoploss after reaching take profit  → стоп у беззбитку ⚠
+     - Stop Target Hit                                → стоп-лосс ⛔
+    """
+    key = extract_key(text)
+    if 'Closed at stoploss after reaching take profit' in text:
+        label = "Стоп в б/з "
+    elif 'Stop Target Hit' in text:
+        label = "Стоп"
+    else:
+        label = "Стоп"
+    return key, label
+
+# 6) Окремий handler тільки для Cornix-каналу
+@client.on(events.NewMessage(chats=[NEW_SRC]))
+async def cornix_handler(event):
+    dst  = mapping[NEW_SRC]
     text = (event.message.message or "").strip()
 
-    # 1) Cornix-канал: не фільтруємо по “Intraday,”, а дивимося на зміст
-    if src == NEW_SRC:
-        # Обробляємо лише ті повідомлення, що мають хоча б один із наших патернів:
-        if "Entry Zone" in text:
-            sym, final = process_cornix_initial(text)
-            sent = await client.send_message(dst, final, parse_mode='md')
-            symbol_to_msgid[sym] = sent.id
-            return
-
-        if "Take-Profit target" in text and "✅" in text:
-            sym, final = process_cornix_take(text)
-            reply_to = symbol_to_msgid.get(sym)
-            await client.send_message(dst, final, parse_mode='md', reply_to=reply_to)
-            return
-
-        if "All take-profit targets" in text:
-            sym, final = process_cornix_all_take(text)
-            reply_to = symbol_to_msgid.get(sym)
-            await client.send_message(dst, final, parse_mode='md', reply_to=reply_to)
-            return
-
-        if "Stop-Loss" in text or "Closed at stoploss" in text or "Stop Target Hit" in text:
-            sym, final = process_cornix_stop(text)
-            reply_to = symbol_to_msgid.get(sym)
-            await client.send_message(dst, final, parse_mode='md', reply_to=reply_to)
-            return
-
-        # всі інші повідомлення з this каналу — ігноруємо
+    # 6.1) Перший сигнал
+    if "Entry Zone" in text:
+        sym, out = process_cornix_initial(text)
+        sent = await client.send_message(dst, out, parse_mode='md', link_preview=False)
+        symbol_to_msgid[sym] = sent.id
+        print(f"[DEBUG] Записано символ {sym} з msg_id = {sent.id}")
         return
 
-    # 2) Всі інші канали — ваша стандартна логіка
+    # 6.2) Одиночний тейк
+    if "Take-Profit target" in text and "✅" in text:
+        sym, out = process_cornix_take(text)
+        to_id = symbol_to_msgid.get(sym)
+        print(f"[DEBUG] Take-повідомлення для {sym}, знайдений msg_id = {to_id}")
+        if to_id:
+            await client.send_message(dst, out, parse_mode='md', link_preview=False, reply_to=to_id)
+        return
+
+    # 6.3) Всі тейки
+    if "All take-profit targets" in text:
+        sym, out = process_cornix_all_take(text)
+        to_id = symbol_to_msgid.get(sym)
+        print(f"[DEBUG] All-takes для {sym}, msg_id = {to_id}")
+        if to_id:
+            await client.send_message(dst, out, parse_mode='md', link_preview=False, reply_to=to_id)
+        return
+
+    # 6.4) Стоп-лосс
+    if any(kw in text for kw in ("Stop-Loss", "Stop Target Hit", "Closed at stoploss")):
+        sym, out = process_cornix_stop(text)
+        to_id = symbol_to_msgid.get(sym)
+        print(f"[DEBUG] Стоп для {sym}, msg_id = {to_id}")
+        if to_id:
+            await client.send_message(dst, out, parse_mode='md', link_preview=False, reply_to=to_id)
+        return
+
+# 4) Загальний хендлер для інших каналів залишається без змін, але не обробляє NEW_SRC
+@client.on(events.NewMessage(chats=list(mapping.keys())))
+async def handler(event):
+    src = event.chat_id
+    if src == NEW_SRC:
+        return  # все повідомлення NEW_SRC вже оброблені в cornix_handler
+
+    dst  = mapping[src]
+    text = (event.message.message or "").strip()
     urls = extract_all_links(event.message)
+
     if src == MEXC_SRC:
         if not text.lower().startswith("#mexc"):
             return
         final = process_2407118810(text, urls)
-
     elif src == BYBIT_DUMP_SRC:
         if not text.lower().startswith("#bybit"):
             return
         final = process_2354753954(text, urls)
-
     elif src == BYBIT_LIQUIDATION_SRC:
         if not (text.startswith("🔴") or text.startswith("🟢")):
             return
         final = process_bybit_liquidations(text, urls)
-
     elif src == ARB_SRC:
         final = process_6620270004(text, urls)
-
     else:
         final = process_general(text)
 
