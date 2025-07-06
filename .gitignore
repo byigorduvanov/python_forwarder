@@ -7,3 +7,6 @@ session.session-journal
 __pycache__/
 *.pyc
 debug_last.py
+last.py
+thread_messages.json
+thread_messages.jsonl
