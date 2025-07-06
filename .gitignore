@@ -4,3 +4,5 @@
 session.session
 session.session-journal
 .idea/
+__pycache__/
+*.pyc
