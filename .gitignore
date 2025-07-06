@@ -6,3 +6,4 @@ session.session-journal
 .idea/
 __pycache__/
 *.pyc
+debug_last.py
