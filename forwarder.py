@@ -64,7 +64,7 @@ REFERRAL_PARAMS = {
     "bitget":   ("ref",           "u/4CS395UZ"),
     "bingx":    ("invite",        "WBU7DG"),
     "huobi":    ("invite_code",   "jadv5223"),
-    "gateio":   ("ref_type",      "103"),
+    "gateio":   ("ref_type",      "VGVNVF5DAG"),
     "whitebit": ("referral",      "2603b5d0-55b7-49a0-b202-db326e322d9d"),
 }
 
@@ -140,7 +140,7 @@ def process_2407118810(text, urls):
             continue
 
         # Убираем Weex и лишние |
-        line = line.replace("Weex", "").replace("|", "").strip()
+        line = line.replace("Gate", "").replace("|", "").strip()
 
         # Оборачиваем тикер
         m = re.match(r'(#mexc_[^:]+:\s*)(\S+)', line, flags=re.IGNORECASE)
