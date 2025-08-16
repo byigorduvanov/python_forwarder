@@ -84,51 +84,112 @@ def append_referral(url: str, exch: str) -> str:
     return f"{base}?{new_query}"
 
 # Обработка арбитражного канала
+def _action_to_market_and_dir(action: str):
+    """
+    Повертає (market, direction), де:
+      market ∈ {'spot','swap'}
+      direction ∈ {'long','short'}  (BUY трактуємо як 'long')
+    """
+    a = (action or "").lower()
+    if any(k in a for k in ("short", "шорт")):
+        return "swap", "short"
+    if any(k in a for k in ("long", "лонг")):
+        return "swap", "long"
+    if any(k in a for k in ("buy", "куп", "покуп", "купить")):
+        return "spot", "long"
+    # дефолт — spot long
+    return "spot", "long"
 
-# Обработка арбитражного канала
+def _exch_name_only(exch_field: str) -> str:
+    # "gateio (https://...)" -> "gateio"
+    return exch_field.split("(", 1)[0].strip().lower()
+
+def _normalize_exchange_slug(name: str) -> str:
+    n = re.sub(r'[^a-z0-9]+', '', (name or '').lower())
+    aliases = {
+        'gateio': 'gate', 'gate': 'gate',
+        'okex': 'okx', 'okx': 'okx',
+        'huobi': 'htx', 'htx': 'htx',
+        'binance': 'binance',
+        'bybit': 'bybit',
+        'mexc': 'mexc',
+        'kucoin': 'kucoin',
+        'bitget': 'bitget',
+        'blofin': 'blofin',
+        'ourbit': 'ourbit',
+    }
+    return aliases.get(n, n)
+
 def process_6620270004(text, urls):
     lines_out = []
     all_lines = text.splitlines()
     if not all_lines:
         return ""
 
-    # Первую строку — wrap тикер
+    # 1) Тікер
     first = all_lines[0].strip()
     m = re.match(r'^([^:\s]+):\s*(.*)', first)
     if m:
         ticker, rest = m.groups()
-        lines_out.append(f'`{ticker}`: {rest}')
+        lines_out.append(f'{ticker}: {rest}')
     else:
         lines_out.append(first)
+        ticker = first.split(':', 1)[0].strip()
+    ticker_slug = re.sub(r'[^a-z0-9]+', '', ticker.lower())
 
-    # Собираем список бирж по |exchange|
+    # 2) |exchange| -> url
     exchange_tokens = re.findall(r'\|([^|]+)\|', text)
-    exchange_urls   = dict(zip(exchange_tokens, urls))
+    exchange_urls = dict(zip(exchange_tokens, urls))
 
-    # Обрабатываем остальные строки
+    legs = []  # зберігаємо [{'slug','market','dir'}] у порядку появи
+
+    # 3) Обробка рядків
     for line in all_lines[1:]:
         low = line.lower().strip()
-
-        # фильтруем стоп-слова и "график"/📈
         if should_block_line(line) or "график" in low or line.startswith("📈"):
             continue
 
         m2 = re.match(r'^(\S+)\s*\|([^|]+)\|\s*-\s*(.+)', line)
         if m2:
             emoji, exch, action = m2.groups()
-            raw = exchange_urls.get(exch, "")
-            if raw:
-                clean      = raw.split('?', 1)[0]
-                with_ref   = append_referral(clean, exch)
-                md_link    = f"[{exch}]({with_ref})"
-            else:
-                md_link = exch
-            line = f"{emoji} |{md_link}| - {action}"
 
-        lines_out.append(line)
+            raw = exchange_urls.get(exch, "")
+            if not raw:
+                murl = re.search(r'\((https?://[^)]+)\)', exch)
+                raw = murl.group(1) if murl else ""
+
+            clean = raw.split('?', 1)[0] if raw else ""
+            with_ref = append_referral(clean, exch) if clean else ""
+
+            exch_display = _exch_name_only(exch)
+            exch_slug = _normalize_exchange_slug(exch_display)
+            md_link = f"[{exch_display}]({with_ref})" if with_ref else exch_display
+
+            lines_out.append(f"{emoji} |{md_link}| - {action}")
+
+            market, direction = _action_to_market_and_dir(action)
+            if len(legs) < 2:  # беремо тільки перші дві ноги
+                legs.append({"slug": exch_slug, "market": market, "dir": direction})
+        else:
+            lines_out.append(line)
+
+    # 4) Формуємо посилання: СПОЧАТКУ SHORT, ПОТІМ LONG/BUY
+    if ticker_slug and len(legs) >= 2:
+        # відсортуємо так, щоб short був першим
+        legs_sorted = sorted(legs[:2], key=lambda L: 0 if L["dir"] == "short" else 1)
+
+        uainvest_link = (
+            f"https://uainvest.com.ua/arbitrage/"
+            f"{ticker_slug}-{legs_sorted[0]['slug']}-{legs_sorted[0]['market']}-"
+            f"{ticker_slug and ''}{legs_sorted[1]['slug']}-{legs_sorted[1]['market']}"
+        )
+        # ↑ залишив формат як був: ticker-EX1-market1-EX2-market2
+        # (ticker_slug and '' ) тримає формат конкатенації без пробілів
+
+        lines_out.append("")
+        lines_out.append(uainvest_link)
 
     return "\n".join(lines_out)
-
 
 
 # Обработка MEXC
