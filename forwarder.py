@@ -131,7 +131,7 @@ def process_6620270004(text, urls):
     m = re.match(r'^([^:\s]+):\s*(.*)', first)
     if m:
         ticker, rest = m.groups()
-        lines_out.append(f'{ticker}: {rest}')
+        lines_out.append(f'`{ticker}`: {rest}')
     else:
         lines_out.append(first)
         ticker = first.split(':', 1)[0].strip()
