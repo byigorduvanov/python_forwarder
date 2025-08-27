@@ -49,7 +49,7 @@ def should_block_line(line: str) -> bool:
     blocked = [
         'Бонусные ссылки', 'поддержка', 'nazare_crypto',
         'График', 'Live Chart', 'Trade BTC/USDT',
-        'Торгуйте фьючерсами', 'Perpetual Trading', 'BYBLT'
+        'Торгуйте фьючерсами', 'Perpetual Trading', 'BYBIT'
     ]
     return any(x.lower() in line.lower() for x in blocked)
 
@@ -260,15 +260,38 @@ def process_2354753954(text, urls):
 
 def process_bybit_liquidations(text, urls):
     """
-    Спеціальна обробка для Bybit Liquidations:
-    - прибираємо останній рядок з бонусними ссылками та поддержкой
-    - (за потреби можна додати інші трансформації)
+    Bybit Liquidations:
+    - підсвічує тікер у першому рядку бектиками (для зручного копіювання)
+    - додає 'Trade: [Bybit](<ref link>)' як у process_2354753954
+    - фільтрує сміттєві рядки
     """
+    out = []
     lines = text.splitlines()
-    # якщо останній рядок містить "бонус" або "поддерж", відсікаємо його
-    if lines and any(kw in lines[-1].lower() for kw in ("бонус", "ссыл", "поддерж")):
-        lines = lines[:-1]
-    return "\n".join(lines)
+
+    # 1) перший рядок: 🟢 NMRUSDT Шорт ликв.  /  🔴 NMRUSDT Лонг ликв.
+    if lines:
+        first = lines[0]
+        m = re.match(r'^([🔴🟢])\s*([A-Z0-9]+)\b(.*)$', first.strip())
+        if m:
+            dot, ticker, tail = m.groups()
+            # обгортаємо тікер бектиками -> копіюється по long-tap
+            first = f"{dot} `{ticker}`{tail}"
+        out.append(first)
+
+    # 2) інші рядки як є, але без стоп-слів
+    for line in lines[1:]:
+        if should_block_line(line):
+            continue
+        out.append(line)
+
+    # 3) додаємо реф-лінк "Trade: Bybit"
+    #    (якщо потрібно – заміни базовий url на конкретну сторінку торгів)
+    base = "https://www.bybit.com/"
+    with_ref = append_referral(base, "bybit")
+    out.append(f"Trade: [Bybit]({with_ref})")
+
+    return "\n".join(out)
+
 # Универсальная обработка
 def process_general(text):
     return "\n".join(line for line in text.splitlines() if not should_block_line(line))
